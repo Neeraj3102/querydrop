@@ -2,6 +2,8 @@
 
 > **Drop large CSV files into your browser. Run blazing-fast SQLite queries via WebAssembly. Render dynamic pivot charts. 100% Client-Side. Zero data ever leaves your computer.**
 
+### 🌐 [**Live Demo →** neeraj3102.github.io/querydrop](https://neeraj3102.github.io/querydrop/)
+
 ---
 
 ## 🎯 Key Highlights
