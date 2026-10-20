@@ -15,7 +15,7 @@ async function initEngine() {
     });
 
     SQL = await initSqlJs({
-      locateFile: () => './sql-wasm.wasm',
+      locateFile: () => new URL('../sql-wasm.wasm', import.meta.url).href,
     });
     db = new SQL.Database();
 
