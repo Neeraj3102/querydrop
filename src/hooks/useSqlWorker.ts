@@ -40,11 +40,24 @@ export function useSqlWorker() {
           columns: data.columns,
           rows: data.rows,
           rowCount: data.rowCount,
+          rowsAffected: data.rowsAffected,
           executionTimeMs: data.executionTimeMs,
         });
         setIsLoading(false);
         setProgress(null);
         setErrorMessage(null);
+      } else if (data.type === 'DB_EXPORTED') {
+        const blob = new Blob([data.buffer as any], {
+          type: 'application/x-sqlite3',
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `querydrop_database_${Date.now()}.sqlite`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setIsLoading(false);
+        setProgress(null);
       } else if (data.type === 'ERROR') {
         setErrorMessage(data.message);
         setIsLoading(false);
@@ -86,6 +99,37 @@ export function useSqlWorker() {
     });
   }, []);
 
+  const exportDatabase = useCallback(() => {
+    if (!workerRef.current) return;
+    setIsLoading(true);
+    setProgress({
+      type: 'PROGRESS',
+      phase: 'Serializing SQLite database to .sqlite binary...',
+      percent: 85,
+    });
+    workerRef.current.postMessage({
+      type: 'EXPORT_DB',
+    });
+  }, []);
+
+  const resetDatabase = useCallback(() => {
+    if (!workerRef.current) return;
+    setIsLoading(true);
+    setActiveResult(null);
+    setErrorMessage(null);
+    workerRef.current.postMessage({
+      type: 'RESET_DB',
+    });
+  }, []);
+
+  const dropTable = useCallback((tableName: string) => {
+    if (!workerRef.current) return;
+    workerRef.current.postMessage({
+      type: 'DROP_TABLE',
+      tableName,
+    });
+  }, []);
+
   return {
     isReady,
     isLoading,
@@ -96,5 +140,8 @@ export function useSqlWorker() {
     errorMessage,
     loadCsv,
     runQuery,
+    exportDatabase,
+    resetDatabase,
+    dropTable,
   };
 }

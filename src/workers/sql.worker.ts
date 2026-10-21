@@ -33,14 +33,17 @@ function inferType(val: any): string {
   if (typeof val === 'number') {
     return Number.isInteger(val) ? 'INTEGER' : 'REAL';
   }
-  if (!isNaN(Number(val)) && val.trim?.() !== '') {
+  if (!isNaN(Number(val)) && typeof val === 'string' && val.trim() !== '') {
     return val.includes('.') ? 'REAL' : 'INTEGER';
   }
   return 'TEXT';
 }
 
-function sanitizeIdentifier(name: string): string {
-  return name.trim().replace(/[^a-zA-Z0-9_]/g, '_');
+function sanitizeIdentifier(name: string, fallback = 'col'): string {
+  const clean = name.trim().replace(/[^a-zA-Z0-9_]/g, '_');
+  if (!clean || /^_+$/.test(clean)) return fallback;
+  if (/^[0-9]/.test(clean)) return `col_${clean}`;
+  return clean;
 }
 
 // Ingest CSV content into an SQLite Table
@@ -49,12 +52,12 @@ async function loadCSV(tableName: string, csvContent: string) {
   if (!db) throw new Error('Database not initialized');
 
   const startTime = performance.now();
-  const safeTableName = sanitizeIdentifier(tableName);
+  const safeTableName = sanitizeIdentifier(tableName, 'dataset');
 
   self.postMessage({
     type: 'PROGRESS',
-    phase: `Parsing CSV data for ${safeTableName}...`,
-    percent: 30,
+    phase: `Parsing CSV data for "${safeTableName}"...`,
+    percent: 25,
   });
 
   const parsed = Papa.parse<Record<string, any>>(csvContent, {
@@ -72,14 +75,27 @@ async function loadCSV(tableName: string, csvContent: string) {
     throw new Error('CSV file contains no rows');
   }
 
-  const fields = parsed.meta.fields || Object.keys(rows[0]);
-  const safeFields = fields.map((f) => sanitizeIdentifier(f));
+  const rawFields = parsed.meta.fields || Object.keys(rows[0]);
+  
+  // Sanitize and deduplicate column names
+  const safeFields: string[] = [];
+  const seenNames: Record<string, number> = {};
+  rawFields.forEach((field, idx) => {
+    let sanitized = sanitizeIdentifier(field, `column_${idx + 1}`);
+    if (seenNames[sanitized] !== undefined) {
+      seenNames[sanitized]++;
+      sanitized = `${sanitized}_${seenNames[sanitized]}`;
+    } else {
+      seenNames[sanitized] = 1;
+    }
+    safeFields.push(sanitized);
+  });
 
   // Infer types using sample rows
   const sampleSize = Math.min(rows.length, 100);
   const columnTypes: Record<string, string> = {};
 
-  fields.forEach((field, idx) => {
+  rawFields.forEach((field, idx) => {
     const safeCol = safeFields[idx];
     let detectedType = 'TEXT';
     for (let i = 0; i < sampleSize; i++) {
@@ -105,7 +121,7 @@ async function loadCSV(tableName: string, csvContent: string) {
   self.postMessage({
     type: 'PROGRESS',
     phase: `Inserting ${rows.length.toLocaleString()} rows into SQLite...`,
-    percent: 60,
+    percent: 50,
   });
 
   // Batch insert rows within a single transaction
@@ -114,13 +130,24 @@ async function loadCSV(tableName: string, csvContent: string) {
   const insertSql = `INSERT INTO "${safeTableName}" VALUES (${placeholders});`;
   const stmt = db.prepare(insertSql);
 
+  const reportInterval = Math.max(5000, Math.floor(rows.length / 10));
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const values = fields.map((field) => {
+    const values = rawFields.map((field) => {
       const val = row[field];
       return val === undefined ? null : val;
     });
     stmt.run(values);
+
+    if (i > 0 && i % reportInterval === 0 && rows.length > 5000) {
+      const pct = Math.round(50 + (i / rows.length) * 45);
+      self.postMessage({
+        type: 'PROGRESS',
+        phase: `Inserted ${i.toLocaleString()} / ${rows.length.toLocaleString()} rows...`,
+        percent: pct,
+      });
+    }
   }
   stmt.free();
   db.run('COMMIT;');
@@ -152,6 +179,7 @@ async function runQuery(id: string, sql: string) {
   try {
     const res = db.exec(sql);
     const executionTimeMs = Math.round((performance.now() - startTime) * 10) / 10;
+    const rowsAffected = db.getRowsModified();
 
     if (!res || res.length === 0) {
       self.postMessage({
@@ -160,13 +188,16 @@ async function runQuery(id: string, sql: string) {
         columns: [],
         rows: [],
         rowCount: 0,
+        rowsAffected,
         executionTimeMs,
       });
       await broadcastSchema();
       return;
     }
 
-    const { columns, values } = res[0];
+    // If multi-statement query, pick the last non-empty result set
+    const activeResult = res[res.length - 1];
+    const { columns, values } = activeResult;
 
     self.postMessage({
       type: 'QUERY_RESULT',
@@ -174,8 +205,14 @@ async function runQuery(id: string, sql: string) {
       columns,
       rows: values,
       rowCount: values.length,
+      rowsAffected,
       executionTimeMs,
     });
+
+    // Check if query modified schema (CREATE, DROP, ALTER)
+    if (/^\s*(CREATE|DROP|ALTER)\b/i.test(sql)) {
+      await broadcastSchema();
+    }
   } catch (err: any) {
     self.postMessage({
       type: 'ERROR',
@@ -236,6 +273,30 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
       await runQuery(data.id, data.sql);
     } else if (data.type === 'GET_SCHEMA') {
       await initEngine();
+      await broadcastSchema();
+    } else if (data.type === 'EXPORT_DB') {
+      await initEngine();
+      if (!db) throw new Error('Database not initialized');
+      const binaryArray = db.export();
+      self.postMessage({
+        type: 'DB_EXPORTED',
+        buffer: binaryArray,
+      });
+    } else if (data.type === 'RESET_DB') {
+      if (db) {
+        db.close();
+        if (SQL) db = new SQL.Database();
+      }
+      await broadcastSchema();
+      self.postMessage({
+        type: 'PROGRESS',
+        phase: 'Database reset to empty state',
+        percent: 100,
+      });
+    } else if (data.type === 'DROP_TABLE') {
+      if (!db) throw new Error('Database not initialized');
+      const safe = sanitizeIdentifier(data.tableName);
+      db.run(`DROP TABLE IF EXISTS "${safe}";`);
       await broadcastSchema();
     }
   } catch (err: any) {

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import * as echarts from 'echarts';
-import { BarChart3, PieChart, LineChart, ScatterChart, Download } from 'lucide-react';
+import { BarChart3, PieChart, LineChart, ScatterChart, Download, Info } from 'lucide-react';
 import type { QueryResult } from '../types';
 
 interface ChartPanelProps {
@@ -8,6 +8,8 @@ interface ChartPanelProps {
 }
 
 type ChartType = 'bar' | 'line' | 'pie' | 'scatter';
+
+const MAX_CHART_ROWS = 60;
 
 export const ChartPanel = ({ result }: ChartPanelProps) => {
   const chartRef = useRef<HTMLDivElement | null>(null);
@@ -17,54 +19,66 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
   const [xAxisCol, setXAxisCol] = useState<string>('');
   const [yAxisCol, setYAxisCol] = useState<string>('');
 
-  if (!result || result.columns.length < 2 || result.rows.length === 0) {
-    return null;
-  }
+  const columns = useMemo(() => result?.columns ?? [], [result?.columns]);
+  const rows = useMemo(() => result?.rows ?? [], [result?.rows]);
+  const hasValidData = columns.length >= 2 && rows.length > 0;
+  const isCapped = rows.length > MAX_CHART_ROWS;
 
-  const { columns, rows } = result;
+  // Derive active columns safely
+  const activeX = columns.includes(xAxisCol) ? xAxisCol : columns[0] ?? '';
+  const activeY = columns.includes(yAxisCol)
+    ? yAxisCol
+    : columns.find((_, i) => typeof rows[0]?.[i] === 'number') || columns[1] || '';
 
-  // Auto-select initial columns
-  useEffect(() => {
-    if (columns.length >= 2) {
-      if (!xAxisCol || !columns.includes(xAxisCol)) setXAxisCol(columns[0]);
-      if (!yAxisCol || !columns.includes(yAxisCol)) {
-        const numCol = columns.find((_, i) => typeof rows[0]?.[i] === 'number') || columns[1];
-        setYAxisCol(numCol);
-      }
-    }
-  }, [columns, rows]);
+  // Chart sliced data
+  const chartRows = useMemo(() => {
+    return rows.slice(0, MAX_CHART_ROWS);
+  }, [rows]);
 
   // Render or Update ECharts
   useEffect(() => {
-    if (!chartRef.current || !xAxisCol || !yAxisCol) return;
+    if (!chartRef.current || !hasValidData || !activeX || !activeY) return;
 
     if (!chartInstance.current) {
       chartInstance.current = echarts.init(chartRef.current, 'dark');
     }
 
     const chart = chartInstance.current;
-    const xIdx = columns.indexOf(xAxisCol);
-    const yIdx = columns.indexOf(yAxisCol);
+    const xIdx = columns.indexOf(activeX);
+    const yIdx = columns.indexOf(activeY);
 
-    const xData = rows.map((r) => String(r[xIdx] ?? ''));
-    const yData = rows.map((r) => Number(r[yIdx]) || 0);
+    const xData = chartRows.map((r) => String(r[xIdx] ?? ''));
+    const yData = chartRows.map((r) => Number(r[yIdx]) || 0);
 
     let option: echarts.EChartsOption = {};
 
     if (chartType === 'pie') {
-      const pieData = rows.map((r) => ({
+      const pieData = chartRows.map((r) => ({
         name: String(r[xIdx] ?? ''),
         value: Number(r[yIdx]) || 0,
       }));
 
       option = {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        tooltip: {
+          trigger: 'item',
+          formatter: '{b}: {c} ({d}%)',
+          backgroundColor: '#0f172a',
+          borderColor: '#1e293b',
+          textStyle: { color: '#f8fafc' },
+        },
+        legend: {
+          orient: 'horizontal',
+          bottom: 'bottom',
+          textStyle: { color: '#94a3b8', fontSize: 11 },
+          type: 'scroll',
+        },
         series: [
           {
+            name: activeY,
             type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
+            radius: ['38%', '68%'],
+            avoidLabelOverlap: true,
             itemStyle: {
               borderRadius: 8,
               borderColor: '#020617',
@@ -75,12 +89,27 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
         ],
       };
     } else if (chartType === 'scatter') {
-      const scatterData = rows.map((r) => [r[xIdx], r[yIdx]]);
+      const scatterData = chartRows.map((r) => [r[xIdx], r[yIdx]]);
       option = {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'item' },
-        xAxis: { type: 'value', name: xAxisCol, splitLine: { lineStyle: { color: '#1e293b' } } },
-        yAxis: { type: 'value', name: yAxisCol, splitLine: { lineStyle: { color: '#1e293b' } } },
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: '#0f172a',
+          borderColor: '#1e293b',
+          textStyle: { color: '#f8fafc' },
+        },
+        xAxis: {
+          type: 'value',
+          name: activeX,
+          nameTextStyle: { color: '#94a3b8' },
+          splitLine: { lineStyle: { color: '#1e293b' } },
+        },
+        yAxis: {
+          type: 'value',
+          name: activeY,
+          nameTextStyle: { color: '#94a3b8' },
+          splitLine: { lineStyle: { color: '#1e293b' } },
+        },
         series: [
           {
             type: 'scatter',
@@ -96,23 +125,32 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
         tooltip: {
           trigger: 'axis',
           axisPointer: { type: 'shadow' },
+          backgroundColor: '#0f172a',
+          borderColor: '#1e293b',
+          textStyle: { color: '#f8fafc' },
         },
-        grid: { left: '3%', right: '4%', bottom: '10%', top: '12%', containLabel: true },
+        grid: { left: '3%', right: '4%', bottom: '12%', top: '12%', containLabel: true },
         xAxis: {
           type: 'category',
           data: xData,
-          axisLabel: { color: '#94a3b8', rotate: xData.length > 8 ? 30 : 0 },
+          axisLabel: {
+            color: '#94a3b8',
+            rotate: xData.length > 8 ? 30 : 0,
+            interval: 0,
+            fontSize: 11,
+          },
           axisLine: { lineStyle: { color: '#334155' } },
         },
         yAxis: {
           type: 'value',
-          name: yAxisCol,
-          axisLabel: { color: '#94a3b8' },
+          name: activeY,
+          nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+          axisLabel: { color: '#94a3b8', fontSize: 11 },
           splitLine: { lineStyle: { color: '#1e293b' } },
         },
         series: [
           {
-            name: yAxisCol,
+            name: activeY,
             type: chartType,
             data: yData,
             smooth: true,
@@ -127,7 +165,7 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
               chartType === 'line'
                 ? {
                     color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                      { offset: 0, color: 'rgba(6, 182, 212, 0.4)' },
+                      { offset: 0, color: 'rgba(6, 182, 212, 0.45)' },
                       { offset: 1, color: 'rgba(59, 130, 246, 0.0)' },
                     ]),
                   }
@@ -139,13 +177,17 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
 
     chart.setOption(option, true);
 
-    const handleResize = () => chart.resize();
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver(() => {
+      chart.resize();
+    });
+    if (chartRef.current) {
+      resizeObserver.observe(chartRef.current);
+    }
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
     };
-  }, [result, chartType, xAxisCol, yAxisCol]);
+  }, [columns, chartRows, chartType, activeX, activeY, hasValidData]);
 
   const exportChart = () => {
     if (!chartInstance.current) return;
@@ -160,20 +202,32 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
     a.click();
   };
 
+  if (!hasValidData) {
+    return null;
+  }
+
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-4 shadow-xl">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-800">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-cyan-400" />
           <span className="text-xs font-semibold text-slate-200">
-            Dynamic Visualizer (ECharts)
+            Dynamic Visualizer (Apache ECharts)
           </span>
+          {isCapped && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded-full"
+              title="Charts automatically render the top 60 rows to prevent browser DOM and canvas lag"
+            >
+              <Info className="w-3 h-3" /> Top 60 rendered
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
           <button
             onClick={() => setChartType('bar')}
-            className={`p-1.5 rounded-md text-xs transition ${
+            className={`p-1.5 rounded-md text-xs transition cursor-pointer ${
               chartType === 'bar' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-slate-400 hover:text-white'
             }`}
             title="Bar Chart"
@@ -182,7 +236,7 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
           </button>
           <button
             onClick={() => setChartType('line')}
-            className={`p-1.5 rounded-md text-xs transition ${
+            className={`p-1.5 rounded-md text-xs transition cursor-pointer ${
               chartType === 'line' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-slate-400 hover:text-white'
             }`}
             title="Line Chart"
@@ -191,7 +245,7 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
           </button>
           <button
             onClick={() => setChartType('pie')}
-            className={`p-1.5 rounded-md text-xs transition ${
+            className={`p-1.5 rounded-md text-xs transition cursor-pointer ${
               chartType === 'pie' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-slate-400 hover:text-white'
             }`}
             title="Pie / Donut Chart"
@@ -200,7 +254,7 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
           </button>
           <button
             onClick={() => setChartType('scatter')}
-            className={`p-1.5 rounded-md text-xs transition ${
+            className={`p-1.5 rounded-md text-xs transition cursor-pointer ${
               chartType === 'scatter' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-slate-400 hover:text-white'
             }`}
             title="Scatter Plot"
@@ -209,13 +263,13 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
-            <span>X:</span>
+            <span>X-Axis:</span>
             <select
-              value={xAxisCol}
+              value={activeX}
               onChange={(e) => setXAxisCol(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-500 focus:outline-none"
+              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-500 focus:outline-none cursor-pointer"
             >
               {columns.map((c) => (
                 <option key={c} value={c}>
@@ -226,11 +280,11 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
           </div>
 
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
-            <span>Y:</span>
+            <span>Y-Axis:</span>
             <select
-              value={yAxisCol}
+              value={activeY}
               onChange={(e) => setYAxisCol(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-500 focus:outline-none"
+              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-500 focus:outline-none cursor-pointer"
             >
               {columns.map((c) => (
                 <option key={c} value={c}>
@@ -242,10 +296,10 @@ export const ChartPanel = ({ result }: ChartPanelProps) => {
 
           <button
             onClick={exportChart}
-            className="flex items-center gap-1 text-xs text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 px-2 py-1 rounded transition"
-            title="Export Chart as PNG"
+            className="flex items-center gap-1 text-xs text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 px-2.5 py-1 rounded transition cursor-pointer"
+            title="Export Chart as PNG image"
           >
-            <Download className="w-3 h-3" />
+            <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">PNG</span>
           </button>
         </div>

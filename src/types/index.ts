@@ -15,6 +15,7 @@ export interface QueryResult {
   columns: string[];
   rows: any[][];
   rowCount: number;
+  rowsAffected?: number;
   executionTimeMs: number;
   error?: string;
 }
@@ -35,10 +36,26 @@ export interface WorkerGetSchemaPayload {
   type: 'GET_SCHEMA';
 }
 
+export interface WorkerExportDbPayload {
+  type: 'EXPORT_DB';
+}
+
+export interface WorkerResetDbPayload {
+  type: 'RESET_DB';
+}
+
+export interface WorkerDropTablePayload {
+  type: 'DROP_TABLE';
+  tableName: string;
+}
+
 export type WorkerIncomingMessage =
   | WorkerLoadCSVPayload
   | WorkerRunQueryPayload
-  | WorkerGetSchemaPayload;
+  | WorkerGetSchemaPayload
+  | WorkerExportDbPayload
+  | WorkerResetDbPayload
+  | WorkerDropTablePayload;
 
 export interface WorkerSuccessResponse {
   type: 'CSV_LOADED';
@@ -54,12 +71,18 @@ export interface WorkerQueryResponse {
   columns: string[];
   rows: any[][];
   rowCount: number;
+  rowsAffected?: number;
   executionTimeMs: number;
 }
 
 export interface WorkerSchemaResponse {
   type: 'SCHEMA_UPDATE';
   tables: TableSchema[];
+}
+
+export interface WorkerDbExportedResponse {
+  type: 'DB_EXPORTED';
+  buffer: Uint8Array;
 }
 
 export interface WorkerErrorResponse {
@@ -79,5 +102,6 @@ export type WorkerOutgoingMessage =
   | WorkerSuccessResponse
   | WorkerQueryResponse
   | WorkerSchemaResponse
+  | WorkerDbExportedResponse
   | WorkerErrorResponse
   | WorkerProgressResponse;

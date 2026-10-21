@@ -37,7 +37,7 @@ ORDER BY total_revenue DESC;`,
     }
   },
   {
-    id: 'world_cities_metrics',
+    id: 'world_cities',
     name: 'Global Tech Hubs & Quality of Life',
     description: 'Metropolitan indicators: tech job density, average tech salary, cost of living index',
     filename: 'world_cities.csv',
