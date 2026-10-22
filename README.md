@@ -9,145 +9,27 @@
 </p>
 
 <p align="center">
-  <b>Drop any CSV into your browser. Run complex SQL with JOINs, Window Functions, and CTEs.</b><br/>
+  <b>Drop any large CSV into your browser. Run complex SQL with JOINs, Window Functions, and CTEs.</b><br/>
   <b>Instant pivot charts. 100% Client-Side. Zero servers. Zero cloud fees. Zero data leaks.</b>
 </p>
 
 <p align="center">
-  <a href="https://neeraj3102.github.io/querydrop/">
-    <img src="https://img.shields.io/badge/🚀_LAUNCH_LIVE_DEMO-neeraj3102.github.io%2Fquerydrop-0284c7?style=for-the-badge&labelColor=0f172a" alt="Launch Live Demo" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="#-interactive-sql-query-playground">🎮 Interactive Query Playground</a>
+  <a href="https://neeraj3102.github.io/querydrop/"><strong>Explore Live Workbench »</strong></a>
   ·
-  <a href="#-why-querydrop">Why QueryDrop?</a>
+  <a href="#-benchmarks">View Benchmarks</a>
   ·
   <a href="#-architecture">Architecture</a>
   ·
-  <a href="#-live-benchmarks">Benchmarks</a>
-  ·
-  <a href="#-interactive-faq">FAQ</a>
+  <a href="#-running-locally">Quickstart</a>
 </p>
-
----
-
-<!-- Animated Interactive-Feel Terminal Simulator -->
-<p align="center">
-  <img src="./public/querydrop-demo-terminal.svg" width="100%" alt="QueryDrop Live SQL Wasm Terminal Simulation" />
-</p>
-
----
-
-## 🎮 Interactive SQL Query Playground
-
-> **Click any tab below to expand and inspect the query, execution logic, and live output format:**
-
-<details open>
-<summary><b>📊 1. Group-By Aggregations & Latency Percentiles (Click to toggle)</b></summary>
-
-```sql
--- Calculate error rates and average response time grouped by edge gateway
-SELECT 
-    json_extract(response_metadata_json, '$.gateway') AS edge_gateway,
-    COUNT(*) AS total_requests,
-    ROUND(AVG(duration_ms), 2) AS avg_duration_ms,
-    ROUND(SUM(CASE WHEN http_status >= 500 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS error_rate_pct
-FROM telemetry
-GROUP BY 1
-HAVING total_requests > 500
-ORDER BY error_rate_pct DESC;
-```
-
-**Output Table Preview:**
-| edge_gateway | total_requests | avg_duration_ms | error_rate_pct |
-| :--- | :---: | :---: | :---: |
-| `cf-edge-03` | 31,250 | 18.42 ms | 3.12 % |
-| `cf-edge-07` | 31,250 | 14.19 ms | 2.94 % |
-| `cf-edge-01` | 31,250 | 12.05 ms | 1.05 % |
-
-</details>
-
-<details>
-<summary><b>🪟 2. Analytical Window Functions & Regional Ranking (Click to toggle)</b></summary>
-
-```sql
--- Rank top 2 heaviest bandwidth routes in each geographical city
-WITH RankedBandwidth AS (
-    SELECT 
-        geo_city,
-        endpoint_route,
-        bandwidth_bytes,
-        DENSE_RANK() OVER (
-            PARTITION BY geo_city 
-            ORDER BY bandwidth_bytes DESC
-        ) AS rank_within_city
-    FROM telemetry
-)
-SELECT geo_city, endpoint_route, bandwidth_bytes
-FROM RankedBandwidth
-WHERE rank_within_city <= 2;
-```
-
-**Output Table Preview:**
-| geo_city | endpoint_route | bandwidth_bytes |
-| :--- | :--- | :---: |
-| `Tokyo 東京 🇯🇵` | `/v2/telemetry/events/batch?compress=gzip` | 10,485,760 B |
-| `Tokyo 東京 🇯🇵` | `/v1/billing/invoices/export?format=pdf` | 9,842,100 B |
-| `München 🇩🇪` | `/v2/accounts/{id}/transfers` | 10,481,200 B |
-
-</details>
-
-<details>
-<summary><b>🚨 3. Real-Time Anomaly Detection & Outlier Filtering (Click to toggle)</b></summary>
-
-```sql
--- Identify anomalous requests where duration exceeded 3x the global average
-SELECT 
-    record_id,
-    event_timestamp,
-    endpoint_route,
-    duration_ms,
-    stack_trace
-FROM telemetry
-WHERE is_anomaly = 1 
-  AND duration_ms > (SELECT AVG(duration_ms) * 3 FROM telemetry)
-ORDER BY duration_ms DESC
-LIMIT 5;
-```
-
-**Output Table Preview:**
-| record_id | event_timestamp | duration_ms | stack_trace |
-| :--- | :--- | :---: | :--- |
-| `REC-30018491` | `2024-08-14 18:22:01.402` | 4,812.30 ms | `DatabaseTimeoutException: Connection acquisition timed out` |
-| `REC-30009412` | `2024-04-11 09:12:44.118` | 4,690.15 ms | `RateLimitExceeded: 429 Too Many Requests` |
-
-</details>
-
-<details>
-<summary><b>🧩 4. Nested JSON Extraction & Schema Flattening (Click to toggle)</b></summary>
-
-```sql
--- Extract and aggregate operating system versions directly from JSON payload
-SELECT 
-    json_extract(request_payload_json, '$.device.os') AS client_os,
-    COUNT(*) AS total_hits,
-    ROUND(AVG(CAST(json_extract(request_payload_json, '$.retries') AS REAL)), 2) AS avg_retries
-FROM telemetry
-GROUP BY 1
-ORDER BY total_hits DESC;
-```
-
-</details>
 
 ---
 
 ## 💡 Why QueryDrop?
 
 Every day, data analysts, engineers, and researchers face a dilemma when analyzing confidential CSVs:
-1. **Excel/Sheets**: Freezes or truncates after a few hundred thousand rows; no relational SQL or window functions.
-2. **Cloud Data Warehouses (Snowflake, BigQuery)**: Requires provisioning clusters, IAM credentials, storage buckets, and incurring billing.
+1. **Excel/Sheets**: Freezes or truncates after a few hundred thousand rows; no relational SQL.
+2. **Cloud Data Warehouses (Snowflake, BigQuery)**: Requires provisioning clusters, creating IAM roles, managing storage buckets, and incurring billing costs.
 3. **Data Privacy Risks**: Uploading internal corporate telemetry, financial sheets, or PII to third-party SaaS converters violates compliance (GDPR/SOC-2/HIPAA).
 
 **QueryDrop solves this entirely in your browser.** By cross-compiling the real SQLite C engine to WebAssembly and offloading data parsing to a background Web Worker thread, QueryDrop turns your browser into a local, isolated SQL warehouse capable of querying hundreds of thousands of rows with zero latency.
@@ -168,6 +50,17 @@ Every day, data analysts, engineers, and researchers face a dilemma when analyzi
 
 ---
 
+## ⚡ Key Architectural Features
+
+- **🛡️ Air-Gapped Privacy**: Files never touch an API. Everything lives inside isolated browser memory buffers using the HTML5 File & Stream APIs.
+- **⚙️ Native SQLite C-Engine via WebAssembly**: Powered by `sql.js` (Emscripten-compiled SQLite 3.x). You get the exact same relational consistency, aggregate functions, and deterministic planner as native SQLite.
+- **🧵 Off-Thread Web Worker Orchestration**: CSV chunking, type inference, transaction batching, and query execution run on a separate OS thread via `sql.worker.ts`. Your scroll and UI never stutter.
+- **📊 Interactive Apache ECharts**: Seamlessly switch between Bar, Line, Pie, and Scatter plots. Auto-detects categorical axes vs numerical measures, with instant high-res canvas exports.
+- **🔍 Smart Schema & Type Coercion**: Automatically analyzes headers and values to infer `INTEGER`, `REAL`, and `TEXT`, with fallback type sanitization for complex nested JSON and ISO dates.
+- **🗃️ Sample Playgrounds**: Instant preloaded datasets (Global E-Commerce Orders, Tech Hub Quality of Life) so anyone can evaluate capabilities immediately with zero setup.
+
+---
+
 ## 🏗️ Architecture
 
 ```mermaid
@@ -175,7 +68,7 @@ flowchart TD
     subgraph Browser_Main_Thread ["Browser UI (Main Thread)"]
         UI["React 19 Dashboard"]
         Dropzone["Drag & Drop File Zone"]
-        SQLEditor["SQL Editor Console"]
+        SQLEditor["Monaco/Code Query Console"]
         Visualizer["Apache ECharts Engine"]
         ResultsGrid["Virtual Paginated Data Grid"]
     end
@@ -201,39 +94,54 @@ flowchart TD
 
 ---
 
-## 🚀 Live Benchmarks
+## 🚀 Performance & Benchmark
 
 Tested locally on Google Chrome (V8) with the enterprise telemetry stress dataset:
 
-| Benchmark Test | Volume / Complexity | Throughput / Latency | Status |
-| :--- | :--- | :--- | :---: |
-| **Dataset Ingestion** | **146.82 MB** (250,000 rows × 22 columns) | **~9.9 seconds** (25,250 rows/sec) | 🟢 Passed |
-| **Streaming RFC Parse** | Escaped quotes, multiline stack traces | **~5.0 seconds** (0 errors) | 🟢 Passed |
-| **Aggregate Query** | `SELECT COUNT(*), AVG(duration_ms)` | **12 ms** | ⚡ Instant |
-| **Group-By Analytics** | `GROUP BY geo_city, http_status` | **28 ms** | ⚡ Instant |
-| **Memory Ceiling** | 32-bit Wasm Linear Heap | **~480 MB** (Safely within 2GB tab limit) | 🟢 Stable |
+| Metric | Result |
+| :--- | :--- |
+| **Dataset Size** | **146.82 MB** (`ultra_complex_enterprise_telemetry_120mb.csv`) |
+| **Total Rows & Columns** | **250,000 records** × 22 columns |
+| **Parse & Type Inference** | ~5.0 seconds |
+| **SQLite Wasm Table Load** | ~9.9 seconds (batched in single transaction) |
+| **Aggregate Query Latency** | **12 ms** (`SELECT COUNT(*), AVG(duration_ms), MAX(bandwidth_bytes)`) |
+| **Group-By Aggregation** | **28 ms** (`SELECT geo_city, count(*), sum(bandwidth_bytes) GROUP BY 1`) |
+| **Memory Footprint** | Stays within browser WebAssembly 32-bit linear memory limit (~512MB heap) |
 
 ---
 
-## ❓ Interactive FAQ
+## 💻 Sample Analytical Queries
 
-<details>
-<summary><b>🔒 Does any data ever leave my computer?</b></summary>
-<br/>
-<b>No. Never.</b> QueryDrop is a 100% client-side Single Page Application (SPA). Your CSV file is read into your browser's private memory using the standard HTML5 File API and transferred directly into the WebAssembly SQLite virtual machine. No telemetry, analytics, or file chunks are ever transmitted over the network.
-</details>
+Once your CSV is dropped, execute standard SQLite queries directly:
 
-<details>
-<summary><b>📈 How does it handle large files without freezing my tab?</b></summary>
-<br/>
-QueryDrop executes all parsing and database logic inside a dedicated browser <code>Web Worker</code> (<code>sql.worker.ts</code>). Because the worker runs on a separate operating system thread, the main thread responsible for React rendering, typing in the SQL editor, and rendering ECharts stays at a smooth 60 FPS.
-</details>
+```sql
+-- 1. Identify high-risk error spikes by city and status
+SELECT 
+    geo_city,
+    http_status,
+    COUNT(*) AS total_errors,
+    ROUND(AVG(duration_ms), 2) AS avg_latency_ms
+FROM telemetry
+WHERE http_status >= 500
+GROUP BY geo_city, http_status
+ORDER BY total_errors DESC
+LIMIT 10;
+```
 
-<details>
-<summary><b>💾 Can I export my session as a real SQLite database file?</b></summary>
-<br/>
-<b>Yes!</b> Click the <code>Export .sqlite</code> button in the top navigation. QueryDrop serializes the in-memory SQLite database into a binary <code>Uint8Array</code> and initiates a direct browser download of a genuine <code>.sqlite</code> file compatible with DBeaver, TablePlus, or the SQLite CLI.
-</details>
+```sql
+-- 2. Window function: Top 3 longest API routes per city
+WITH RankedRoutes AS (
+    SELECT 
+        geo_city,
+        endpoint_route,
+        duration_ms,
+        DENSE_RANK() OVER (PARTITION BY geo_city ORDER BY duration_ms DESC) as rank
+    FROM telemetry
+)
+SELECT geo_city, endpoint_route, duration_ms
+FROM RankedRoutes
+WHERE rank <= 3;
+```
 
 ---
 
