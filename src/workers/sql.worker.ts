@@ -30,6 +30,7 @@ async function initEngine() {
 // Infer SQLite column type from JS sample values
 function inferType(val: any): string {
   if (val === null || val === undefined || val === '') return 'TEXT';
+  if (val instanceof Date) return 'TEXT';
   if (typeof val === 'number') {
     return Number.isInteger(val) ? 'INTEGER' : 'REAL';
   }
@@ -37,6 +38,15 @@ function inferType(val: any): string {
     return val.includes('.') ? 'REAL' : 'INTEGER';
   }
   return 'TEXT';
+}
+
+function sanitizeBindingValue(val: any): any {
+  if (val === undefined || val === null) return null;
+  if (val instanceof Date) return val.toISOString();
+  if (typeof val === 'object') return JSON.stringify(val);
+  if (typeof val === 'number') return Number.isFinite(val) ? val : null;
+  if (typeof val === 'boolean') return val ? 1 : 0;
+  return val;
 }
 
 function sanitizeIdentifier(name: string, fallback = 'col'): string {
@@ -134,10 +144,7 @@ async function loadCSV(tableName: string, csvContent: string) {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const values = rawFields.map((field) => {
-      const val = row[field];
-      return val === undefined ? null : val;
-    });
+    const values = rawFields.map((field) => sanitizeBindingValue(row[field]));
     stmt.run(values);
 
     if (i > 0 && i % reportInterval === 0 && rows.length > 5000) {
@@ -300,9 +307,10 @@ self.onmessage = async (e: MessageEvent<WorkerIncomingMessage>) => {
       await broadcastSchema();
     }
   } catch (err: any) {
+    console.error('SQL Worker processing error:', err);
     self.postMessage({
       type: 'ERROR',
-      message: err?.message || 'Worker processing error',
+      message: err?.message || String(err) || 'Worker processing error',
     });
   }
 };
