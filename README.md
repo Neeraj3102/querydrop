@@ -1,11 +1,14 @@
 # ⚡ QueryDrop — In-Browser Serverless SQL Analytics Workbench
 
 <p align="center">
+  <a href="https://github.com/Neeraj3102/querydrop/stargazers"><img src="https://img.shields.io/github/stars/Neeraj3102/querydrop?style=for-the-badge&logo=github&color=F59E0B" alt="GitHub Stars" /></a>
+  <a href="https://github.com/Neeraj3102/querydrop/network/members"><img src="https://img.shields.io/github/forks/Neeraj3102/querydrop?style=for-the-badge&logo=github&color=6B7280" alt="Forks" /></a>
   <img src="https://img.shields.io/badge/SQLite-WebAssembly-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite Wasm" />
   <img src="https://img.shields.io/badge/React_19-TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/Apache-ECharts-AA344D?style=for-the-badge&logo=apacheecharts&logoColor=white" alt="Apache ECharts" />
   <img src="https://img.shields.io/badge/Privacy-100%25_Client--Side-10B981?style=for-the-badge&logo=shield&logoColor=white" alt="Privacy First" />
   <img src="https://img.shields.io/badge/Cost-%240_Serverless-8B5CF6?style=for-the-badge" alt="Zero Server Cost" />
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License" />
 </p>
 
 <p align="center">
@@ -14,7 +17,9 @@
 </p>
 
 <p align="center">
-  <a href="https://neeraj3102.github.io/querydrop/"><strong>Explore Live Workbench »</strong></a>
+  <a href="https://neeraj3102.github.io/querydrop/"><strong>🚀 Explore Live Workbench »</strong></a>
+  ·
+  <a href="https://github.com/Neeraj3102/querydrop/stargazers"><strong>⭐️ Star on GitHub</strong></a>
   ·
   <a href="#-benchmarks">View Benchmarks</a>
   ·
@@ -164,6 +169,14 @@ npm run lint
 # 5. Build optimized production bundle
 npm run build
 ```
+
+---
+
+## 🌟 Support & Contributions
+
+If QueryDrop saved you time or cloud fees, please consider giving it a ⭐️ **Star** on GitHub — it helps more developers discover client-side SQL analytics!
+
+Issues, PRs, and feature discussions are welcomed on [GitHub Issues](https://github.com/Neeraj3102/querydrop/issues).
 
 ---
 
